@@ -9,7 +9,7 @@ interface ExistingValuesQueryInterface
     /**
      * Включает прогрев database warmup для найденных строк.
      */
-    public function warmup(string ...$keyColumns): self;
+    public function warmup(): self;
 
     /**
      * Выполняет запрос и возвращает найденные значения колонки.

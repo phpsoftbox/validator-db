@@ -13,7 +13,8 @@
         "sort-packages": true
     },
     "require": {
-        "php": "^8.4"
+        "php": "^8.4",
+        "phpsoftbox/database-lookup": "dev-master"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.2"

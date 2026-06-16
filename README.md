@@ -12,6 +12,7 @@ composer require phpsoftbox/validator-db
 ```php
 use PhpSoftBox\Validator\Db\Contracts\DatabaseBulkValidationAdapterInterface;
 use PhpSoftBox\Validator\Db\Contracts\ExistingValuesQueryInterface;
+use PhpSoftBox\DatabaseLookup\LookupSpec;
 
 final class MyAdapter implements DatabaseBulkValidationAdapterInterface
 {
@@ -20,16 +21,11 @@ final class MyAdapter implements DatabaseBulkValidationAdapterInterface
         // ...
     }
 
-    public function existingValues(
-        string $table,
-        string $column,
-        array $values,
-        array $criteria = [],
-        ?string $connection = null,
-    ): ExistingValuesQueryInterface {
+    public function existingValues(LookupSpec $lookup, ?string $connection = null): ExistingValuesQueryInterface
+    {
         // Возвращает query object.
         // Обычное выполнение: ->fetch()
-        // С прогревом: ->warmup('shipment_id', 'product_id')->fetch()
+        // С прогревом: ->warmup()->fetch()
     }
 
     public function unique(
