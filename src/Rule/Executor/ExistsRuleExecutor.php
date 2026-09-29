@@ -9,6 +9,7 @@ use PhpSoftBox\DatabaseLookup\LookupSpec;
 use PhpSoftBox\Validator\Db\Contracts\DatabaseBulkValidationAdapterInterface;
 use PhpSoftBox\Validator\Db\Contracts\DatabaseValidationAdapterInterface;
 use PhpSoftBox\Validator\Db\Rule\ExistsValidation;
+use PhpSoftBox\Validator\Db\Support\FieldColumn;
 use PhpSoftBox\Validator\Rule\Executor\RuleExecutorInterface;
 use PhpSoftBox\Validator\Rule\RuleSpecificationInterface;
 use PhpSoftBox\Validator\Support\DataPath;
@@ -22,6 +23,7 @@ use function is_array;
 use function is_bool;
 use function is_float;
 use function is_int;
+use function is_numeric;
 use function is_object;
 use function is_string;
 use function method_exists;
@@ -83,7 +85,7 @@ final readonly class ExistsRuleExecutor implements RuleExecutorInterface
         if (!is_array($value)) {
             return [new ValidationViolation(ValidationEnum::EXISTS_ALL->value, [
                 'table'          => $table,
-                'column'         => $rule->columnName() ?? $field,
+                'column'         => $rule->columnName() ?? FieldColumn::fromField($field),
                 'connection'     => $rule->connectionName(),
                 'missing_values' => [],
             ])];
@@ -94,7 +96,7 @@ final readonly class ExistsRuleExecutor implements RuleExecutorInterface
             return [];
         }
 
-        $column = $rule->columnName() ?? $field;
+        $column = FieldColumn::assert($rule->columnName() ?? FieldColumn::fromField($field), $field);
         if (!$this->adapter instanceof DatabaseBulkValidationAdapterInterface) {
             throw new InvalidArgumentException('Для правила exists_all требуется bulk database validation adapter.');
         }
@@ -138,7 +140,8 @@ final readonly class ExistsRuleExecutor implements RuleExecutorInterface
      */
     private function buildLookup(ExistsValidation $rule, string $table, string $column, array $values): LookupSpec
     {
-        $lookup = $rule->lookupSpec() ?? LookupSpec::forTable($table)->lookupColumn($column);
+        // Явная column() переопределяет колонку lookup, а не игнорируется.
+        $lookup = $rule->lookupSpec()?->lookupColumn($column) ?? LookupSpec::forTable($table)->lookupColumn($column);
         $lookup = $lookup->values($values);
 
         if ($rule->whereCriteria() !== []) {
@@ -162,11 +165,17 @@ final readonly class ExistsRuleExecutor implements RuleExecutorInterface
         $criteria = [];
         if ($columns !== []) {
             foreach ($columns as $column) {
-                $criteria[$column] = DataPath::get($data, $column);
+                $criteria[FieldColumn::assert($column)] = DataPath::get($data, $column);
             }
         } else {
-            $column            = $rule->columnName() ?? $field;
+            $column            = FieldColumn::assert($rule->columnName() ?? FieldColumn::fromField($field), $field);
             $criteria[$column] = $value;
+        }
+
+        // Условия lookup (например, tenant_id) действуют и для одиночной проверки: без них проверка прошла бы по
+        // строкам другого тенанта.
+        if ($rule->lookupSpec() !== null) {
+            $criteria = array_merge($criteria, $rule->lookupSpec()->whereCriteria());
         }
 
         if ($rule->whereCriteria() !== []) {
@@ -200,8 +209,13 @@ final readonly class ExistsRuleExecutor implements RuleExecutorInterface
             return 'bool:' . ($value ? '1' : '0');
         }
 
-        if (is_int($value) || is_float($value) || is_string($value)) {
-            return 'scalar:' . (string) $value;
+        // Числа и числовые строки сравниваются как числа: БД вернёт 1 для введённого "01".
+        if (is_int($value) || is_float($value) || (is_string($value) && is_numeric($value))) {
+            return 'number:' . (string) ($value + 0);
+        }
+
+        if (is_string($value)) {
+            return 'scalar:' . $value;
         }
 
         if (is_object($value) && method_exists($value, '__toString')) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PhpSoftBox\Validator\Db\Tests;
 
+use InvalidArgumentException;
 use PhpSoftBox\DatabaseLookup\LookupSpec;
 use PhpSoftBox\Validator\Db\Contracts\DatabaseBulkValidationAdapterInterface;
 use PhpSoftBox\Validator\Db\Rule\Executor\ExistsRuleExecutor;
@@ -456,8 +457,78 @@ final class ValidatorDatabaseRulesTest extends TestCase
     }
 
     /**
-     * @param list<mixed> $existingValues
      */
+    /**
+     * Проверим, что колонка по умолчанию — последний нечисловой сегмент пути поля, а не весь путь.
+     *
+     * @see ExistsRuleExecutor::validate()
+     */
+    #[Test]
+    public function existsUsesLastSegmentOfNestedField(): void
+    {
+        $adapter = $this->databaseAdapter(exists: true, unique: true);
+
+        $this->validator($adapter)->validate(
+            ['user' => ['email' => 'a@b.com']],
+            ['user.email' => [ExistsValidation::make()->table('users')]],
+        );
+
+        self::assertSame(['email' => 'a@b.com'], $adapter->lastCriteria);
+    }
+
+    /**
+     * Проверим, что одиночный exists с lookup() применяет условия LookupSpec (scope тенанта).
+     *
+     * @see ExistsRuleExecutor::validate()
+     */
+    #[Test]
+    public function existsWithLookupAppliesItsScope(): void
+    {
+        $adapter = $this->databaseAdapter(exists: true, unique: true);
+
+        $this->validator($adapter)->validate(
+            ['product_id' => 7],
+            ['product_id' => [ExistsValidation::make()->lookup(LookupSpec::forTable('products')->lookupColumn('id')->where('tenant_id', 3))]],
+        );
+
+        self::assertSame('products', $adapter->lastTable);
+        self::assertSame(['id' => 7, 'tenant_id' => 3], $adapter->lastCriteria);
+    }
+
+    /**
+     * Проверим, что путь поля, который не даёт идентификатор колонки, требует явного column(), а не попадает в SQL.
+     *
+     * @see ExistsRuleExecutor::validate()
+     */
+    #[Test]
+    public function rejectsFieldWithoutIdentifierColumn(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->validator($this->databaseAdapter(exists: true, unique: true))->validate(
+            ['items' => ['x"; DROP' => 1]],
+            ['items.x"; DROP' => [ExistsValidation::make()->table('items')]],
+        );
+    }
+
+    /**
+     * Проверим, что exists_all сравнивает числовые строки как числа: введённое "01" найдено, если БД вернула 1.
+     *
+     * @see ExistsRuleExecutor::validate()
+     */
+    #[Test]
+    public function existsAllComparesNumericStringsAsNumbers(): void
+    {
+        $adapter = $this->databaseAdapter(exists: true, unique: true, existingValues: [1, 2]);
+
+        $result = $this->validator($adapter)->validate(
+            ['ids' => ['01', '2']],
+            ['ids' => [ExistsValidation::make()->table('products')->column('id')->all()]],
+        );
+
+        self::assertFalse($result->hasErrors());
+    }
+
     private function databaseAdapter(bool $exists, bool $unique, array $existingValues = []): TestDatabaseAdapter
     {
         return new TestDatabaseAdapter($exists, $unique, $existingValues);
