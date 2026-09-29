@@ -7,6 +7,7 @@ namespace PhpSoftBox\Validator\Db\Rule\Executor;
 use InvalidArgumentException;
 use PhpSoftBox\Validator\Db\Contracts\DatabaseValidationAdapterInterface;
 use PhpSoftBox\Validator\Db\Rule\UniqueValidation;
+use PhpSoftBox\Validator\Db\Support\FieldColumn;
 use PhpSoftBox\Validator\Rule\Executor\RuleExecutorInterface;
 use PhpSoftBox\Validator\Rule\RuleSpecificationInterface;
 use PhpSoftBox\Validator\Support\DataPath;
@@ -78,10 +79,10 @@ final readonly class UniqueRuleExecutor implements RuleExecutorInterface
         $criteria = [];
         if ($columns !== []) {
             foreach ($columns as $column) {
-                $criteria[$column] = DataPath::get($data, $column);
+                $criteria[FieldColumn::assert($column)] = DataPath::get($data, $column);
             }
         } else {
-            $column            = $rule->columnName() ?? $field;
+            $column            = FieldColumn::assert($rule->columnName() ?? FieldColumn::fromField($field), $field);
             $criteria[$column] = $value;
         }
 

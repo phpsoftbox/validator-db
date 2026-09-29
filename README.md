@@ -93,6 +93,16 @@ UniqueValidation::make()
     ->connection('main');
 ```
 
+## Колонка и scope
+
+- Без `column()` колонка — последний нечисловой сегмент пути поля: `user.email` → `email`,
+  `items.0.product_id` → `product_id`. Имя попадает в текст SQL, поэтому допускается только идентификатор; иначе —
+  `InvalidArgumentException` с просьбой указать `column()`.
+- Условия `LookupSpec` (например, `tenant_id`) применяются и в одиночной проверке `exists` с `lookup()`, не только
+  в `all()`. Явная `column()` вместе с lookup задаёт колонку поиска, а не игнорируется.
+- `exists_all` сравнивает числовые значения как числа (`"01"` найден, если БД вернула `1`). Регистр и пробелы
+  строк сравниваются как есть: правила сравнения в БД зависят от collation.
+
 ## Breaking change
 
 DB rules и executors перенесены из Validator. Старые namespace не поддерживаются:
